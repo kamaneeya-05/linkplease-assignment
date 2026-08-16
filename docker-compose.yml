@@ -1,0 +1,87 @@
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: linkplease-db
+    environment:
+      POSTGRES_DB: linkplease
+      POSTGRES_USER: linkplease
+      POSTGRES_PASSWORD: linkplease
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U linkplease"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: linkplease-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://linkplease:linkplease@postgres:5432/linkplease
+      PSEUDOGRAM_API_KEY: ${PSEUDOGRAM_API_KEY}
+      PSEUDOGRAM_BASE_URL: ${PSEUDOGRAM_BASE_URL:-https://pseudogram-api.onrender.com}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-your-webhook-secret-here}
+      VERIFY_WEBHOOK_SIGNATURE: "false"
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5); sys.exit(0 if r.status == 200 else 1)"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: linkplease-worker
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: postgresql://linkplease:linkplease@postgres:5432/linkplease
+      PSEUDOGRAM_API_KEY: ${PSEUDOGRAM_API_KEY}
+      PSEUDOGRAM_BASE_URL: ${PSEUDOGRAM_BASE_URL:-https://pseudogram-api.onrender.com}
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      RATE_LIMIT_REQUESTS: 10
+      RATE_LIMIT_SECONDS: 60
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: linkplease-frontend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: linkplease-network

@@ -1,0 +1,68 @@
+services:
+  - type: web
+    name: linkplease-backend
+    runtime: python
+    pythonVersion: 3.11
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: linkplease
+          property: connectionString
+      - key: PSEUDOGRAM_API_KEY
+        sync: false
+      - key: PSEUDOGRAM_BASE_URL
+        value: https://pseudogram-api.onrender.com
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: VERIFY_WEBHOOK_SIGNATURE
+        value: "true"
+      - key: CORS_ORIGINS
+        value: https://linkplease-frontend.onrender.com,https://yourdomain.com
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: RATE_LIMIT_REQUESTS
+        value: "10"
+      - key: RATE_LIMIT_SECONDS
+        value: "60"
+      - key: ENVIRONMENT
+        value: production
+
+  - type: worker
+    name: linkplease-worker
+    runtime: python
+    pythonVersion: 3.11
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python -m app.worker
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: linkplease
+          property: connectionString
+      - key: PSEUDOGRAM_API_KEY
+        sync: false
+      - key: PSEUDOGRAM_BASE_URL
+        value: https://pseudogram-api.onrender.com
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: WORKER_CONCURRENCY
+        value: "4"
+
+  - type: static_site
+    name: linkplease-frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://linkplease-backend.onrender.com
+
+databases:
+  - name: linkplease
+    databaseName: linkplease
+    user: linkplease
+    region: ohio
