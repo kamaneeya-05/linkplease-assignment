@@ -158,7 +158,7 @@ async def webhook(
         verify_webhook_signature(
             body=body,
             signature_header=signature_header,
-            secret=settings.pseudogram_api_key,
+            secret=settings.webhook_secret,
             verify_enabled=settings.verify_webhook_signature,
         )
 
