@@ -1,53 +1,291 @@
-# LinkPlease assignment repository
+LinkPlease Assignment
 
-This repository contains a backend + frontend implementation for the LinkPlease assignment. The source of truth for requirements is this README and the assignment brief in the workspace; this implementation is intended to satisfy the required API contract and the backend reliability guarantees described there.
+A full-stack implementation of the LinkPlease assignment with a FastAPI backend, PostgreSQL database, durable delivery worker, PseudoGram integration, and React frontend.
 
-## Status summary
+Overview
 
-- IMPLEMENTED: rule creation, webhook ingest, durable event persistence, database duplicate protections, status tracking, stats endpoint, and frontend dashboard wiring.
-- TESTED LOCALLY: backend unit tests under SQLite; frontend production build.
-- TESTED WITH POSTGRES: not executed in this environment.
-- TESTED AGAINST REAL PSEUDOGRAM: not executed because credentials were unavailable in this session.
-- DEPLOYMENT VERIFIED: not executed here.
+The system receives comment-created webhook events, matches comments against active keyword rules, creates durable DM delivery jobs, and sends DMs asynchronously through the PseudoGram API.
 
-## Required API contract
+The implementation focuses on reliability requirements including:
 
-- POST /webhook
-- POST /rules
-- GET /stats
+Durable webhook event persistence
 
-The implementation keeps these exact routes and required response shapes.
+Idempotent webhook processing
 
-## Important implementation notes
+Duplicate delivery protection
 
-- Webhook requests are verified using the raw request body and an HMAC-SHA256 comparison.
-- Duplicate event_id values are protected by a database unique constraint.
-- Same rule + user pairs are protected by a unique database constraint to prevent logical duplicate sends.
-- The external DM API is called only by the worker, not synchronously from the webhook request path.
-- Rate-limit reservation is performed atomically in the database before the outbound HTTP send.
-- Delivery status is treated as accepted/queued at 202 and only counted as sent when confirmed as delivered by GET /v1/dm/{dm_id}.
+Asynchronous DM delivery through a worker
 
-## Local verification commands
+Database-backed rate limiting
 
-From the backend directory:
+Retry and exponential backoff handling
 
-```bash
-python -m pytest -q
-```
+Delivery status tracking
+
+Reconciliation with the external PseudoGram API
+
+Health and statistics endpoints
+
+Docker-based local development
+
+React frontend dashboard
+
+API Contract
+
+The required API endpoints are:
+
+POST /webhook - receive comment events
+
+POST /rules - create keyword/DM rules
+
+GET /stats - retrieve delivery statistics
+
+A health endpoint is also available:
+
+GET /health
+
+Interactive API documentation is available at http://localhost:8000/docs.
+
+Architecture
+
+PseudoGram webhook
+|
+v
+FastAPI /webhook
+|
+v
+PostgreSQL event persistence
+|
+v
+Active rule matching
+|
+v
+Durable delivery queue
+|
+v
+Background worker
+|
+v
+PseudoGram DM API
+|
+v
+Delivery reconciliation
+|
+v
+PostgreSQL delivery status
+
+Reliability Features
+
+Durable webhook processing
+
+Webhook events are persisted to PostgreSQL before the endpoint returns success.
+
+Each event has a unique event_id, preventing the same webhook event from being processed multiple times.
+
+Duplicate delivery protection
+
+A database uniqueness constraint protects against duplicate deliveries for the same rule and user combination.
+
+Duplicate attempts are recorded and exposed through /stats.
+
+Asynchronous delivery
+
+The webhook endpoint does not synchronously send DMs.
+
+Instead, matching comments create durable delivery records. The worker processes these records independently.
+
+Rate limiting
+
+DM sends use database-backed rate-limit reservation before making the outbound API request.
+
+Retry handling
+
+Temporary failures are retried using exponential backoff with configurable limits.
+
+Permanent failures are marked as failed and are not retried indefinitely.
+
+Idempotent external requests
+
+DM requests include an idempotency key derived from the rule, user, and comment information.
+
+Delivery reconciliation
+
+After a DM is accepted by PseudoGram, the worker periodically checks its external status.
+
+The PseudoGram client accepts successful DM-send responses returned by the API, including HTTP 200 and 202 responses, and requires a valid dm_id.
+
+The delivery is ultimately marked DELIVERED after the external status API confirms delivery.
+
+Case-Insensitive Keyword Matching
+
+Rule keywords are normalized before matching.
+
+For example, a rule created with COLLEGEPRICE matches:
+
+COLLEGEPRICE please
+
+collegeprice please
+
+CollegePrice please
+
+CoLlEgEpRiCe please
+
+Local Development
+
+Prerequisites
+
+Docker Desktop
+
+Git
+
+PowerShell or another terminal
+
+Environment Configuration
+
+Create a local .env file in the project root.
+
+Use .env.example as the template:
+
+Copy-Item .env.example .env
+
+Then set the required PseudoGram API key in .env.
+
+Do not commit .env. The repository's .gitignore excludes local environment files.
+
+Start the Application
+
+From the project root:
+
+docker compose up -d
+
+Check the services:
+
+docker compose ps
+
+Expected services:
+
+PostgreSQL
+
+Backend
+
+Worker
+
+Frontend
+
+Backend
+
+Backend: http://localhost:8000
+
+Swagger documentation: http://localhost:8000/docs
+
+Health check: http://localhost:8000/health
+
+Frontend
+
+Frontend: http://localhost:3000
+
+Testing
+
+Backend Tests
+
+The backend test suite uses a local SQLite test database for isolated tests and does not depend on the PostgreSQL container.
+
+Run from the project root:
+
+docker compose exec backend pytest -q
+
+Latest verified result:
+
+40 passed, 5 warnings
+
+Frontend Build
 
 From the frontend directory:
 
-```bash
 npm install
+
 npm run build
-```
 
-## Real PseudoGram integration note
+Local Integration Verification
 
-Real PseudoGram integration test not executed because credentials were unavailable.
+The application was verified locally using PostgreSQL and the running Docker worker.
 
-## Repository limitations
+Verified behavior includes:
 
-This repo is suitable for local validation and is aligned with the assignment contract, but real-network deployment and live simulator validation are not proven in this session.
+Backend health check
 
-— Ayush
+Rule creation
+
+Webhook ingestion
+
+Event persistence
+
+Keyword matching
+
+Asynchronous worker processing
+
+PseudoGram DM sending
+
+Delivery reconciliation
+
+Duplicate delivery protection
+
+Statistics reporting
+
+Real PseudoGram API-key configuration
+
+Case-insensitive keyword matching
+
+Successful end-to-end tests resulted in deliveries reaching DELIVERED.
+
+The statistics endpoint reported successful deliveries with zero failed or queued deliveries after processing.
+
+Security
+
+Secrets are not stored in source-controlled files.
+
+Docker Compose uses environment-variable interpolation:
+
+PSEUDOGRAM_API_KEY: ${PSEUDOGRAM_API_KEY}
+
+The actual .env file is excluded by .gitignore.
+
+Only .env.example is committed, containing placeholder values.
+
+Webhook signature verification is implemented using the raw request body and HMAC-SHA256 comparison.
+
+Project Structure
+
+backend/ - FastAPI backend, database models, worker, queue, API client, and tests
+
+frontend/ - React frontend
+
+docker-compose.yml - local Docker configuration
+
+render.yaml - Render deployment configuration
+
+.env.example - safe environment-variable template
+
+.gitignore - excludes secrets and generated files
+
+COMPLETENESS_CHECKLIST.md - implementation checklist
+
+FAILURES.md - failure and verification notes
+
+IMPLEMENTATION_REPORT.md - implementation details
+
+LOCAL_SETUP.md - local setup information
+
+Deployment
+
+The repository includes render.yaml for deployment configuration.
+
+Deployment verification will be performed separately against the deployed services.
+
+Notes
+
+This repository was developed and tested as a local full-stack implementation of the LinkPlease assignment.
+
+The actual PseudoGram API was tested using the provided integration flow, and the worker successfully processed deliveries through to DELIVERED.
+
+LinkPlease Assignment
