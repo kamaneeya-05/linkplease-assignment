@@ -7,12 +7,13 @@ matching comments against user-defined rules, and sending direct messages.
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
 import logging
-import os
 
 from app.api import rules, webhooks, stats, health, deliveries
-from app.database import engine, Base, get_db
+from app.database import engine, Base
 from app.config import settings
+from app.worker import DeliveryWorker
 
 # Configure logging
 logging.basicConfig(
@@ -24,13 +25,42 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database on startup, cleanup on shutdown."""
+    """Initialize database and optionally run the delivery worker."""
     logger.info("Starting up LinkPlease backend...")
-    # Create tables
+
+    # Create database tables
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables initialized")
-    yield
-    logger.info("Shutting down LinkPlease backend...")
+
+    worker = None
+    worker_task = None
+
+    # In production, run the delivery worker inside the same
+    # web service so a separate paid background worker is not required.
+    if settings.environment == "production":
+        worker = DeliveryWorker()
+        worker_task = asyncio.create_task(worker.run())
+        logger.info("Embedded delivery worker started")
+
+    try:
+        yield
+    finally:
+        if worker is not None:
+            logger.info("Stopping embedded delivery worker...")
+            worker.running = False
+
+            if worker_task is not None:
+                try:
+                    await asyncio.wait_for(worker_task, timeout=10)
+                except asyncio.TimeoutError:
+                    logger.warning("Worker did not stop within timeout")
+                    worker_task.cancel()
+                    try:
+                        await worker_task
+                    except asyncio.CancelledError:
+                        pass
+
+        logger.info("Shutting down LinkPlease backend...")
 
 
 app = FastAPI(

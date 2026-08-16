@@ -33,30 +33,7 @@ services:
       - key: ENVIRONMENT
         value: production
 
-  - type: worker
-    name: linkplease-worker
-    runtime: python
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.worker
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.11"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: linkplease
-          property: connectionString
-      - key: PSEUDOGRAM_API_KEY
-        sync: false
-      - key: PSEUDOGRAM_BASE_URL
-        value: https://pseudogram-api.onrender.com
-      - key: DEBUG
-        value: "false"
-      - key: LOG_LEVEL
-        value: INFO
-      - key: WORKER_CONCURRENCY
-        value: "4"
-
+  
   - type: web
     runtime: static
     name: linkplease-frontend
