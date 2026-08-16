@@ -20,7 +20,7 @@ def verify_webhook_signature(
     Args:
         body: Raw request body bytes
         signature_header: X-PseudoGram-Signature header value
-        secret: Webhook signing secret
+        secret: Secret key (API key)
         verify_enabled: Whether verification is enabled
 
     Returns:
