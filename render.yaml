@@ -3,6 +3,7 @@ services:
     name: linkplease-backend
     runtime: python
     plan: free
+    region: ohio
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -51,4 +52,4 @@ databases:
     plan: free
     region: ohio
     user: linkplease
-    region: ohio
+    
