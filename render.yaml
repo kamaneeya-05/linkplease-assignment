@@ -49,5 +49,6 @@ databases:
   - name: linkplease
     databaseName: linkplease
     plan: free
+    region: ohio
     user: linkplease
     region: ohio
