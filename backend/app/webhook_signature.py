@@ -2,6 +2,8 @@
 import hmac
 import hashlib
 import logging
+import base64
+import binascii
 from typing import Optional
 from fastapi import HTTPException
 
@@ -51,9 +53,24 @@ def verify_webhook_signature(
         logger.warning(f"Invalid signature header format: {signature_header}")
         raise HTTPException(status_code=400, detail="Invalid signature format")
 
+    # Derive the signing key: check if API key has base64 prefix
+    signing_key = secret
+    if secret and "." in secret:
+        prefix, _ = secret.split(".", 1)
+        try:
+            # Handle base64 padding
+            padding = len(prefix) % 4
+            if padding:
+                prefix += "=" * (4 - padding)
+            decoded = base64.b64decode(prefix).decode("utf-8")
+            if "@" in decoded:
+                signing_key = decoded
+        except (ValueError, binascii.Error, UnicodeDecodeError):
+            pass
+
     # Calculate expected signature
     computed_sig = hmac.new(
-        secret.encode(),
+        signing_key.encode(),
         body,
         hashlib.sha256
     ).hexdigest()
