@@ -160,6 +160,10 @@ async def webhook(
             signature_header=signature_header,
             secret=settings.pseudogram_api_key,
             verify_enabled=settings.verify_webhook_signature,
+            webhook_secret=settings.webhook_secret,
+            content_type=request.headers.get("Content-Type"),
+            user_agent=request.headers.get("User-Agent"),
+            content_length=request.headers.get("Content-Length"),
         )
 
         try:
