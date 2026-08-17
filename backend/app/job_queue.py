@@ -193,12 +193,14 @@ class JobQueue:
         if delivery is None:
             return False
 
+        attempts = delivery.attempts + 1
+        is_permanent = is_permanent or attempts >= settings.max_delivery_attempts
+
         if is_permanent:
             status = DeliveryStatus.FAILED
             next_attempt = None
         else:
             status = DeliveryStatus.QUEUED
-            attempts = delivery.attempts + 1
             delay = min(
                 settings.initial_retry_delay_seconds * (settings.retry_backoff_multiplier ** max(attempts - 1, 0)),
                 settings.max_retry_delay_seconds,
@@ -210,7 +212,7 @@ class JobQueue:
             .where(Delivery.id == delivery_id)
             .values(
                 status=status,
-                attempts=delivery.attempts + 1,
+                attempts=attempts,
                 next_attempt_at=next_attempt,
                 last_error=error,
                 updated_at=datetime.utcnow(),

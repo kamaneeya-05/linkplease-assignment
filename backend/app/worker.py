@@ -98,6 +98,7 @@ class DeliveryWorker:
 
         except PermanentError as e:
             logger.error("Permanent error during reconciliation", extra={"delivery_id": delivery.id, "error": str(e)})
+            JobQueue.mark_failed(db=db, delivery_id=delivery.id, error=str(e), is_permanent=True)
             return False
 
         except TemporaryError as e:

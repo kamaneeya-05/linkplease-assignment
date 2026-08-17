@@ -2,6 +2,7 @@
 import pytest
 from datetime import datetime
 from app.database import Delivery, DeliveryStatus, Rule, Event, EventType
+from app.config import settings
 from app.job_queue import JobQueue
 from sqlalchemy.exc import IntegrityError
 
@@ -180,6 +181,57 @@ def test_delivery_retry_scheduling(db):
     assert delivery.attempts == original_attempts + 1
     assert delivery.next_attempt_at is not None
     assert delivery.last_error == "Temporary error"
+
+
+def test_delivery_retry_below_max_attempts_remains_queued(db):
+    """Temporary failures below the configured limit retain retry behavior."""
+    rule = Rule(id="rule_retry_below_max", keyword="TEST", keyword_normalized="test", dm_message="Test")
+    db.add(rule)
+    delivery = Delivery(
+        id="dlv_retry_below_max",
+        rule_id=rule.id,
+        user_id="user_retry_below_max",
+        comment_id="cmt_retry_below_max",
+        event_id="evt_retry_below_max",
+        message="Test",
+        status=DeliveryStatus.QUEUED,
+        attempts=settings.max_delivery_attempts - 2,
+    )
+    db.add(delivery)
+    db.commit()
+
+    JobQueue.mark_failed(db, delivery.id, error="Temporary error", is_permanent=False)
+
+    db.refresh(delivery)
+    assert delivery.status == DeliveryStatus.QUEUED
+    assert delivery.attempts == settings.max_delivery_attempts - 1
+    assert delivery.next_attempt_at is not None
+
+
+def test_delivery_retry_at_max_attempts_becomes_failed(db):
+    """The final allowed failed attempt must not be requeued."""
+    rule = Rule(id="rule_retry_at_max", keyword="TEST", keyword_normalized="test", dm_message="Test")
+    db.add(rule)
+    delivery = Delivery(
+        id="dlv_retry_at_max",
+        rule_id=rule.id,
+        user_id="user_retry_at_max",
+        comment_id="cmt_retry_at_max",
+        event_id="evt_retry_at_max",
+        message="Test",
+        status=DeliveryStatus.QUEUED,
+        attempts=settings.max_delivery_attempts - 1,
+    )
+    db.add(delivery)
+    db.commit()
+
+    JobQueue.mark_failed(db, delivery.id, error="Retry limit reached", is_permanent=False)
+
+    db.refresh(delivery)
+    assert delivery.status == DeliveryStatus.FAILED
+    assert delivery.attempts == settings.max_delivery_attempts
+    assert delivery.next_attempt_at is None
+    assert delivery.last_error == "Retry limit reached"
 
 
 def test_delivery_permanent_failure(db):
