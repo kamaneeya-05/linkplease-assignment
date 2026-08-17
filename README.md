@@ -20,6 +20,14 @@ The implementation focuses on reliability requirements including:
 - Docker-based local development
 - React frontend dashboard
 
+## Live Deployment
+
+The system is deployed and active in production:
+- **Deployed Frontend URL**: [https://linkplease-frontend.onrender.com](https://linkplease-frontend.onrender.com) (configured via CORS origin policy)
+- **Deployed Backend Base URL**: [https://linkplease-backend-vdr4.onrender.com](https://linkplease-backend-vdr4.onrender.com)
+
+---
+
 ## API Contract
 
 | Method | Endpoint | Purpose |
@@ -31,6 +39,8 @@ The implementation focuses on reliability requirements including:
 A health endpoint is also available: `GET /health`.
 
 Interactive API documentation: `http://localhost:8000/docs`
+
+---
 
 ## Architecture
 
@@ -61,6 +71,8 @@ Delivery reconciliation
         v
 PostgreSQL delivery status
 ```
+
+---
 
 ## Reliability Features
 
@@ -94,7 +106,7 @@ Permanent failures are marked as failed and are not retried indefinitely.
 
 ### Idempotent external requests
 
-DM requests include an idempotency key derived from the rule, user, and comment information.
+DM requests include an idempotency key derived from the rule, user, and comment information (`rule_id:user_id:comment_id`).
 
 ### Delivery reconciliation
 
@@ -103,6 +115,11 @@ After a DM is accepted by PseudoGram, the worker periodically checks its externa
 The PseudoGram client accepts successful DM-send responses returned by the API, including HTTP `200` and `202` responses, and requires a valid `dm_id`.
 
 The delivery is ultimately marked `DELIVERED` after the external status API confirms delivery.
+
+### Detailed Features & Failures Documentation
+For a complete breakdown of all reliability features, see [FEATURES.md](FEATURES.md). For detailed failure analysis and known architectural limitations, see [FAILURES.md](FAILURES.md).
+
+---
 
 ## Case-Insensitive Keyword Matching
 
@@ -114,6 +131,8 @@ For example, a rule created with `COLLEGEPRICE` matches:
 - `collegeprice please`
 - `CollegePrice please`
 - `CoLlEgEpRiCe please`
+
+---
 
 ## Local Development
 
@@ -163,6 +182,50 @@ Expected services:
 
 - Frontend: `http://localhost:3000`
 
+### Stop the Stack
+
+```powershell
+docker compose down
+```
+
+---
+
+## Useful API Endpoints (Production Validation)
+
+You can query the deployed production endpoints using PowerShell:
+
+### Health Check (`GET /health`)
+```powershell
+Invoke-RestMethod "https://linkplease-backend-vdr4.onrender.com/health"
+```
+
+### Statistics (`GET /stats`)
+```powershell
+Invoke-RestMethod "https://linkplease-backend-vdr4.onrender.com/stats"
+```
+
+### Automation Rules (`GET /rules`)
+```powershell
+Invoke-RestMethod "https://linkplease-backend-vdr4.onrender.com/rules"
+```
+
+### Create Automation Rule (`POST /rules`)
+```powershell
+$body = @{
+    keyword = "PRICING"
+    dm_message = "Hi there! Our pricing starts at $10/month. Check it out!"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "https://linkplease-backend-vdr4.onrender.com/rules" -Method Post -ContentType "application/json" -Body $body
+```
+
+### Deliveries History (`GET /deliveries`)
+```powershell
+Invoke-RestMethod "https://linkplease-backend-vdr4.onrender.com/deliveries"
+```
+
+---
+
 ## Testing
 
 ### Backend Tests
@@ -178,7 +241,7 @@ docker compose exec backend pytest -q
 Latest verified result:
 
 ```text
-40 passed, 5 warnings
+43 passed, 5 warnings
 ```
 
 ### Frontend Build
@@ -189,6 +252,8 @@ From the frontend directory:
 npm install
 npm run build
 ```
+
+---
 
 ## Local Integration Verification
 
@@ -213,6 +278,24 @@ Successful end-to-end tests resulted in deliveries reaching `DELIVERED`.
 
 The statistics endpoint reported successful deliveries with zero failed or queued deliveries after processing.
 
+---
+
+## Production Simulator Verification
+
+The final deployed implementation was validated using the live PseudoGram simulator:
+
+- **Simulator Run ID**: `run_9514dea6b916`
+- **Events Generated**: `500`
+- **Webhook Delivery Attempts**: `536` (includes duplicate/redelivery tests)
+- **Accepted Webhook Requests**: `536/536` returned `HTTP 200` (100% verification success rate)
+- **Expected Unique Recipient Count**: `0`
+- **Test Duration**: Approximately **71 seconds**
+- **Stats Ingestion State**: Production statistics matched the expected simulator state.
+
+*Expected Recipients Note*: The expected unique recipient count was zero because the only active production rule keyword was `TEST`, while the simulator's generated comments did not contain the word `TEST`.
+
+---
+
 ## Security
 
 Secrets are not stored in source-controlled files.
@@ -227,7 +310,9 @@ The actual `.env` file is excluded by `.gitignore`.
 
 Only `.env.example` is committed, containing placeholder values.
 
-Webhook signature verification is implemented using the raw request body and HMAC-SHA256 comparison.
+Webhook signature verification uses the exact raw request body and HMAC-SHA256. The deployed verifier follows the signing behavior observed from the live PseudoGram simulator, including deriving the signing key from the Base64 prefix of the configured PSEUDOGRAM_API_KEY when applicable.
+
+---
 
 ## Project Structure
 
@@ -243,6 +328,7 @@ linkplease-assignment/
 ├── .gitignore
 ├── COMPLETENESS_CHECKLIST.md
 ├── FAILURES.md
+├── FEATURES.md
 ├── IMPLEMENTATION_REPORT.md
 ├── LOCAL_SETUP.md
 └── README.md
@@ -258,17 +344,22 @@ linkplease-assignment/
 - `.gitignore` - excludes secrets and generated files
 - `COMPLETENESS_CHECKLIST.md` - implementation checklist
 - `FAILURES.md` - failure and verification notes
+- `FEATURES.md` - implementation features list
 - `IMPLEMENTATION_REPORT.md` - implementation details
 - `LOCAL_SETUP.md` - local setup information
+
+---
 
 ## Deployment
 
 The repository includes `render.yaml` for deployment configuration.
 
-Deployment verification will be performed separately against the deployed services.
+Deployment verification has been performed against the live deployed services.
+
+---
 
 ## Notes
 
-This repository was developed and tested as a local full-stack implementation of the LinkPlease assignment.
+This repository was developed and tested as a local and deployed full-stack implementation of the LinkPlease assignment.
 
 The actual PseudoGram API was tested using the provided integration flow, and the worker successfully processed deliveries through to `DELIVERED`.
